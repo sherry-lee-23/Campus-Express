@@ -110,7 +110,34 @@ std::vector<int> planRoute(const AllPairsResult& cache,
     //   6. 返回 route（不含起点，不含回到起点的最后一段）
     //
     // 提示：使用 getDist(cache, current, dest) 查询距离
-    return {};
+    int D = static_cast<int>(destinations.size());
+    if(D == 0) return {};
+    
+    std::vector<bool> visited(D,false);
+    std::vector<int> route;
+    route.reserve(D);
+
+    int current = startNode;
+    for(int step = 0; step < D; ++step){
+        int bestIndex = -1;
+        double bestDist = Delivery::INF;
+
+        for(int i = 0;i< D;i++){
+            if(visited[i]) continue;
+            double d = getDist(cache,current,destinations[i]);
+            if(d < bestDist){
+                bestDist = d;
+                bestIndex = i;
+            }
+        }
+
+        if (bestIndex == -1) break; // no more reachable destinations
+
+        visited[bestIndex] = true;
+        route.push_back(destinations[bestIndex]);
+        current = destinations[bestIndex];
+    }
+    return route;
 }
 
 // 3. T1: 最短路查询
@@ -155,6 +182,106 @@ Delivery::T2Result solveT2(const AllPairsResult& cache,
     // 提示：参考原 Delivery.cpp 中的 solveT2 实现
 
     Delivery::T2Result result;
+    int k = static_cast<int>(packages.size());
+    if (k == 0) return result;
+
+    std::vector<int>order(k);
+    for(int i = 0;i < k;i++) order[i] = i;
+    std::sort(order.begin(),order.end(),[&](int a, int b){
+        return packages[a].arrive < packages[b].arrive;
+    });
+
+    Delivery::CircularQueue<int> queue(k);
+    for(int idx: order) queue.push(idx);
+
+    double currentTime = 0.0;
+
+    while(!queue.empty()){
+        std::vector<int> all;
+        while(!queue.empty()){
+            all.push_back(queue.front());
+            queue.pop();
+        }
+
+        std::vector<int> available, notAvailable;
+        for(int idx: all){
+            if(packages[idx].arrive <= currentTime + Delivery::EPS){
+                available.push_back(idx);
+            }else{
+                notAvailable.push_back(idx);
+            }
+        }
+
+        if(available.empty()){
+            double nextArrive = Delivery::INF;
+            for(int idx: notAvailable){
+                nextArrive = std::min(nextArrive, packages[idx].arrive);
+            }
+            currentTime = nextArrive;
+            for(int idx: notAvailable) queue.push(idx);
+            continue;
+        }
+
+        std::sort(available.begin(), available.end(), [&](int a, int b){
+            return packages[a].arrive < packages[b].arrive;
+        });
+
+        std::vector<int> loaded;
+        double currentWeight = 0.0;
+        for(int idx: available){
+            if(currentWeight + packages[idx].weight <= car.capacity + Delivery::EPS){
+                loaded.push_back(idx);
+                currentWeight += packages[idx].weight;
+            }else{
+                notAvailable.push_back(idx);
+            }
+        }
+
+        std::map<int, std::vector<int>> destPackages;
+        for(int idx: loaded){
+            destPackages[packages[idx].dest].push_back(idx);
+        }
+
+        std::vector<int> destinations;
+        for(const auto& pair: destPackages){
+            destinations.push_back(pair.first);
+        }
+
+        std::vector<int> route = planRoute(cache, destinations, 0);
+
+        double departureTime = currentTime;
+        double cumulTime = 0.0;
+        int prevNode = 0;
+
+        for(int dest: route){
+            double legDist = getDist(cache, prevNode, dest);
+            cumulTime += legDist / car.speed;
+            double deliveryTime = departureTime + cumulTime;
+
+            for(int idx: destPackages[dest]){
+                result.totalDissatisfaction += deliveryTime - packages[idx].arrive;
+            }
+            prevNode = dest;
+        }
+
+        double returnDist = getDist(cache, prevNode, 0);
+        cumulTime += returnDist / car.speed;
+        currentTime = departureTime + cumulTime;
+
+        Delivery::Trip trip;
+        trip.packageIndices = loaded;
+        trip.route = route;
+        trip.departureTime = departureTime;
+        trip.returnTime = currentTime;
+        trip.totalWeight = currentWeight;
+        result.trips.push_back(trip);
+
+        std::sort(notAvailable.begin(), notAvailable.end(), [&](int a, int b){
+            return packages[a].arrive < packages[b].arrive;
+        });
+
+        for(int idx: notAvailable) queue.push(idx);
+    }
     return result;
 }
 
