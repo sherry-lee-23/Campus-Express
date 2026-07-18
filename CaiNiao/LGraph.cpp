@@ -14,6 +14,7 @@ LGraph::LGraph(const std::vector<LocationInfo>& locs,
     
     for (const auto& e : edges) {
         adj[e.from][e.to] = e; 
+        adj[e.to][e.from] = EdgeNode(e.to, e.from, e.weight);
     }
 }
 

@@ -27,14 +27,44 @@ AllPairsResult computeAllPairs(const Graph::LGraph& graph) {
     // 提示：需要手写 MinHeap 实现优先队列
     // 参考原 Delivery.cpp 中的 dijkstra 和 precomputeAllPairs 实现
 
+    int n = graph.VertexCount();
     AllPairsResult result;
+    result.dist.assign(n,std::vector<double>(n,Delivery::INF));
+    result.prev.assign(n,std::vector<int>(n,-1));
+
+    for(int s = 0;s<n;s++){
+        std::vector<double> dist(n,Delivery::INF);
+        std::vector<int> prev(n,-1);
+        dist[s] = 0.0;
+
+        Delivery::MinHeap<double,int> heap;
+        heap.push(0.0,s);
+
+        while(!heap.empty()){
+            auto [d,u] = heap.top();
+            heap.pop();
+
+            if(d > dist[u] + Delivery::EPS) continue;
+
+            for(const auto&[v,edge] : graph.GetNeighbors(u)){
+                double w = edge.weight;
+                if(dist[u] + w < dist[v] - Delivery::EPS){
+                    dist[v] = dist[u] + w;
+                    prev[v] = u;
+                    heap.push(dist[v],v);
+                }
+            }
+        }
+        result.dist[s] = std::move(dist);
+        result.prev[s] = std::move(prev);
+    }
     return result;
 }
 
 double getDist(const AllPairsResult& cache, int from, int to) {
     // TODO: 返回 from 到 to 的最短距离
     // 直接从 cache.dist[from][to] 读取即可
-    return 0.0;
+    return cache.dist[from][to];
 }
 
 std::vector<int> getPath(const AllPairsResult& cache, int from, int to) {
@@ -47,7 +77,23 @@ std::vector<int> getPath(const AllPairsResult& cache, int from, int to) {
     //
     // 注意：路径应包含起点和终点
     // 例如：from=0, to=5, 路径为 [0, 2, 5]
-    return {};
+    std::vector<int> path;
+    if (from == to){
+        path.push_back(from);
+        return path;
+    }
+
+    int cur = to;
+    while(cur != -1 && cur != from){
+        path.push_back(cur);
+        cur = cache.prev[from][cur];
+    }
+
+    if(cur == -1) return {}; //不可达
+
+    path.push_back(from);
+    std::reverse(path.begin(), path.end());
+    return path;
 }
 
 // 2. 最近邻路由规划
@@ -78,8 +124,10 @@ Delivery::ShortestPathResult solveT1(const AllPairsResult& cache,
     //   3. 如果距离 >= INF，设置 reachable = false
     //   4. 否则 reachable = true
     //   5. 返回 ShortestPathResult
-
     Delivery::ShortestPathResult result;
+    result.distance = getDist(cache, from, to);
+    result.path = getPath(cache, from, to);
+    result.reachable = (result.distance < Delivery::INF - Delivery::EPS);
     return result;
 }
 
