@@ -140,6 +140,7 @@ std::vector<int> planRoute(const AllPairsResult& cache,
     return route;
 }
 
+
 // 3. T1: 最短路查询
 Delivery::ShortestPathResult solveT1(const AllPairsResult& cache,
                                      int from,
@@ -310,6 +311,108 @@ Delivery::T3Result solveT3(const AllPairsResult& cache,
     // 提示：参考原 Delivery.cpp 中的 solveT3 实现
 
     Delivery::T3Result result;
+    int k = static_cast<int>(packages.size());
+    if (k == 0) return result;
+
+    std::vector<int> order(k);
+    for(int i = 0;i < k;i++) order[i] = i;
+    std::sort(order.begin(),order.end(),[&](int a, int b){
+        double distA = getDist(cache, 0, packages[a].dest);
+        double distB = getDist(cache, 0, packages[b].dest);
+        if (std::abs(distA - distB) > Delivery::EPS) return distA < distB;
+        return packages[a].dest < packages[b].dest;
+    });
+
+    std::vector<std::vector<int>> batches;
+    int idx = 0;
+    while(idx < k){
+        std::vector<int> batch;
+        double currentWeight = 0.0;
+        while(idx < k && currentWeight + packages[order[idx]].weight <= car.capacity + Delivery::EPS){
+            batch.push_back(order[idx]);
+            currentWeight += packages[order[idx]].weight;
+            idx++;
+        }
+        if(!batch.empty()) batches.push_back(batch);
+        else idx++; // skip overweight package
+    }
+
+    double currentTime = 0.0;
+    for(const auto& batch : batches){
+        std::map<int, std::vector<int>> destPackages;
+        double totalWeight = 0.0;
+        for(int pkgIdx : batch){
+            destPackages[packages[pkgIdx].dest].push_back(pkgIdx);
+            totalWeight += packages[pkgIdx].weight;
+        }
+
+        std::vector<int> destinations;
+        for(const auto& pair : destPackages){
+            destinations.push_back(pair.first);
+        }
+
+        std::vector<int> route = planRoute(cache, destinations, 0);
+
+        std::vector<Delivery::SegmentCost> segmentCosts;
+        double departureTime = currentTime;
+        double cumulTime = 0.0;
+        int prevNode = 0;
+        double cargoLoad = totalWeight;
+
+        for(int dest : route){
+            double legDist = getDist(cache, prevNode, dest);
+            double srgCost = legDist * (car.carWeight + cargoLoad);
+            result.totalCost += srgCost;
+
+            Delivery::SegmentCost seg;
+            seg.from = prevNode;
+            seg.to = dest;
+            seg.distance = legDist;
+            seg.cargoWeight = cargoLoad;
+            seg.segmentCost = srgCost;
+            segmentCosts.push_back(seg);
+
+            cumulTime += legDist / car.speed;
+            double deliveryTime = departureTime + cumulTime;
+
+            for(int pkgIdx : destPackages[dest]){
+                if(deliveryTime > packages[pkgIdx].deadline + Delivery::EPS){
+                    result.timeoutCount++;
+                }
+            }
+
+            for(int pkgIdx : destPackages[dest]){
+                cargoLoad -= packages[pkgIdx].weight;
+            }
+
+            prevNode = dest;
+        }
+
+        double returnDist = getDist(cache, prevNode, 0);
+        double returnCost = returnDist * (car.carWeight + cargoLoad);
+        result.totalCost += returnCost;
+
+        Delivery::SegmentCost returnSeg;
+        returnSeg.from = prevNode;
+        returnSeg.to = 0;
+        returnSeg.distance = returnDist;
+        returnSeg.cargoWeight = 0.0;
+        returnSeg.segmentCost = returnCost;
+        segmentCosts.push_back(returnSeg);
+
+        cumulTime += returnDist / car.speed;
+        double returnTime = departureTime + cumulTime;
+        currentTime = returnTime;
+
+        Delivery::Trip trip;
+        trip.packageIndices = batch;
+        trip.route = route;
+        trip.departureTime = departureTime;
+        trip.returnTime = returnTime;
+        trip.totalWeight = totalWeight;
+        result.trips.push_back(trip);
+        result.allSegments.push_back(segmentCosts);
+    }
     return result;
 }
 
