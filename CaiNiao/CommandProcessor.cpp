@@ -202,15 +202,18 @@ void CommandProcessor::cmdT4(std::istringstream& args) {
 
     // 节点数 <= 20 使用精确解，否则用启发式
     bool useExact = (returnNodes.size() <= 20);
-    auto result = solveT4(cache_, returnNodes, useExact);
+    auto result = solveT4(cache_, returnNodes, car_, useExact);
 
     std::cout << std::fixed << std::setprecision(1);
     std::cout << "RETURN_NODES " << returnNodes.size() << "\n";
-    std::cout << "ROUTE 0";
+    
+    // 直接打印 result.route（已包含首尾的 0）
+    std::cout << "ROUTE";
     for (int n : result.route) {
         std::cout << " " << n;
     }
-    std::cout << " 0\n";
+    std::cout << "\n";
+    
     std::cout << "TOTAL_TIME " << result.totalTime << "\n";
     std::cout << "METHOD " << (useExact ? "exact" : "heuristic") << "\n";
 }

@@ -45,6 +45,7 @@ Delivery::T3Result solveT3(const AllPairsResult& cache,
 // T4: 退货回收（TSP）
 Delivery::T4Result solveT4(const AllPairsResult& cache,
                            const std::vector<int>& returnNodes,
+                           const Delivery::Car& car,
                            bool useExact = false);
 
 // T5: 双车协同

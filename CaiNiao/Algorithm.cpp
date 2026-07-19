@@ -418,7 +418,8 @@ Delivery::T3Result solveT3(const AllPairsResult& cache,
 
 // 6. T4: 退货回收（TSP）
 static Delivery::T4Result solveT4Exact(const AllPairsResult& cache,
-                                       const std::vector<int>& returnNodes) {
+                                       const std::vector<int>& returnNodes, 
+                                       const Delivery::Car& car) {
     // TODO: 实现 T4 精确解（状态压缩 DP）
     // 条件：returnNodes.size() <= 20
     // 核心逻辑：
@@ -433,13 +434,101 @@ static Delivery::T4Result solveT4Exact(const AllPairsResult& cache,
     //   9. 返回 T4Result{route, totalTime}
     //
     // 提示：返回值路线应包含起点 0 和终点 0
-
     Delivery::T4Result result;
+    int n = static_cast<int>(returnNodes.size());
+    if (n == 0) {
+        result.route = {0};
+        result.totalTime = 0.0;
+        return result;
+    }
+
+    const double INF = Delivery::INF;
+    int fullMask = (1 << n) - 1;
+
+    std::vector<std::vector<double>> dp(1 << n, std::vector<double>(n, INF));
+    std::vector<std::vector<int>> parent(1 << n, std::vector<int>(n, -1));
+
+    // 初始化：从驿站到第一个退货点
+    for (int i = 0; i < n; ++i) {
+        dp[1 << i][i] = getDist(cache, 0, returnNodes[i]);
+        parent[1 << i][i] = -2;  // 起点标记
+    }
+
+    // 状态转移
+    for (int mask = 1; mask < (1 << n); ++mask) {
+        for (int i = 0; i < n; ++i) {
+            if (!(mask & (1 << i))) continue;
+            if (dp[mask][i] >= INF) continue;
+            for (int j = 0; j < n; ++j) {
+                if (mask & (1 << j)) continue;
+                int newMask = mask | (1 << j);
+                double newDist = dp[mask][i] + getDist(cache, returnNodes[i], returnNodes[j]);
+                if (newDist < dp[newMask][j] - Delivery::EPS) {
+                    dp[newMask][j] = newDist;
+                    parent[newMask][j] = i;
+                }
+            }
+        }
+    }
+
+    // 找最优终点并加入返回驿站的距离
+    double bestDist = INF;
+    int bestLast = -1;
+    for (int i = 0; i < n; ++i) {
+        if (dp[fullMask][i] >= INF) continue;
+        double total = dp[fullMask][i] + getDist(cache, returnNodes[i], 0);
+        if (total < bestDist) {
+            bestDist = total;
+            bestLast = i;
+        }
+    }
+
+    if (bestLast == -1 || bestDist >= INF) {
+        result.route = {0};
+        result.totalTime = 0.0;
+        return result;
+    }
+
+    //回溯路径（使用 vector 收集，最后反转）
+    std::vector<int> revRoute;
+    int mask = fullMask;
+    int cur = bestLast;
+    
+    while (true) {
+        revRoute.push_back(returnNodes[cur]);
+        int prev = parent[mask][cur];
+        if (prev == -2) break;      // 到达起点
+        if (prev == -1) {           // 意外情况，安全退出
+            revRoute.clear();
+            break;
+        }
+        mask &= ~(1 << cur);
+        cur = prev;
+    }
+
+    // 如果回溯失败，返回空
+    if (revRoute.empty()) {
+        result.route = {0};
+        result.totalTime = 0.0;
+        return result;
+    }
+
+    std::reverse(revRoute.begin(), revRoute.end());
+
+    //构建完整路线（一次完成，避免重复插入 0）
+    result.route.clear();
+    result.route.reserve(revRoute.size() + 2);
+    result.route.push_back(0);
+    result.route.insert(result.route.end(), revRoute.begin(), revRoute.end());
+    result.route.push_back(0);
+
+    result.totalTime = bestDist / car.speed;
     return result;
 }
 
 static Delivery::T4Result solveT4Heuristic(const AllPairsResult& cache,
-                                           const std::vector<int>& returnNodes) {
+                                           const std::vector<int>& returnNodes,
+                                           const Delivery::Car& car) {
     // TODO: 实现 T4 启发式解（最近邻 + 2-opt）
     // 核心逻辑：
     //   1. 用 planRoute() 生成初始路线
@@ -453,11 +542,59 @@ static Delivery::T4Result solveT4Heuristic(const AllPairsResult& cache,
     // 提示：2-opt 的经典实现参考 TSP 近似算法
 
     Delivery::T4Result result;
+    if (returnNodes.empty()) {
+        result.route = {0};
+        result.totalTime = 0.0;
+        return result;
+    }
+
+    // 用最近邻生成初始顺序
+    std::vector<int> order = planRoute(cache, returnNodes, 0);
+    if (order.empty()) {
+        order = returnNodes;  // 兜底
+    }
+
+    // 2-opt 优化（仅优化中间节点，起点终点固定为0）
+    bool improved = true;
+    while (improved) {
+        improved = false;
+        for (size_t i = 0; i < order.size() - 1; ++i) {
+            for (size_t j = i + 2; j < order.size(); ++j) {
+                int a = (i == 0) ? 0 : order[i - 1];
+                int b = order[i];
+                int c = order[j - 1];
+                int d = (j == order.size()) ? 0 : order[j];
+                double oldDist = getDist(cache, a, b) + getDist(cache, c, d);
+                double newDist = getDist(cache, a, c) + getDist(cache, b, d);
+                if (newDist < oldDist - Delivery::EPS) {
+                    std::reverse(order.begin() + i, order.begin() + j);
+                    improved = true;
+                    break;
+                }
+            }
+            if (improved) break;
+        }
+    }
+
+    // 计算总距离
+    double totalDist = getDist(cache, 0, order[0]);
+    for (size_t i = 1; i < order.size(); ++i) {
+        totalDist += getDist(cache, order[i - 1], order[i]);
+    }
+    totalDist += getDist(cache, order.back(), 0);
+
+    // 构造完整路线
+    result.route.push_back(0);
+    result.route.insert(result.route.end(), order.begin(), order.end());
+    result.route.push_back(0);
+    result.totalTime = totalDist / car.speed;
+
     return result;
 }
 
 Delivery::T4Result solveT4(const AllPairsResult& cache,
                            const std::vector<int>& returnNodes,
+                           const Delivery::Car& car,
                            bool useExact) {
     // TODO: 实现 T4 入口函数
     // 步骤：
@@ -467,8 +604,18 @@ Delivery::T4Result solveT4(const AllPairsResult& cache,
     //
     // 提示：如果 returnNodes 为空，直接返回空路线
 
-    Delivery::T4Result result;
-    return result;
+    if (returnNodes.empty()) {
+        Delivery::T4Result res;
+        res.route = {0};
+        res.totalTime = 0.0;
+        return res;
+    }
+
+    if (useExact && returnNodes.size() <= 20) {
+        return solveT4Exact(cache, returnNodes, car);
+    } else {
+        return solveT4Heuristic(cache, returnNodes, car);
+    }
 }
 
 // 7. T5: 双车协同
