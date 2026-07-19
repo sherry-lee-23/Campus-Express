@@ -53,10 +53,6 @@ Delivery::T5Result solveT5(const AllPairsResult& cache,
                            const std::vector<Delivery::Package>& packages,
                            const Delivery::Car& car);
 
-// T6: 策略对比（内部打印表格）
-void compareStrategies(const AllPairsResult& cache,
-                       const std::vector<Delivery::Package>& packages,
-                       const Delivery::Car& car);
 
 } // namespace algorithm
 

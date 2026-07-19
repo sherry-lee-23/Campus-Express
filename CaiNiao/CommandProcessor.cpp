@@ -8,7 +8,6 @@ using algorithm::solveT2;
 using algorithm::solveT3;
 using algorithm::solveT4;
 using algorithm::solveT5;
-using algorithm::compareStrategies;
 
 namespace Delivery {
 
@@ -37,7 +36,6 @@ bool CommandProcessor::ProcessCommand(const std::string& line) {
         if (cmd == "T3") { cmdT3(iss); return true; }
         if (cmd == "T4") { cmdT4(iss); return true; }
         if (cmd == "T5") { cmdT5(iss); return true; }
-        if (cmd == "T6") { cmdT6(iss); return true; }
 
         printError("unknown_command");
     } catch (const std::exception& e) {
@@ -265,16 +263,6 @@ void CommandProcessor::cmdT5(std::istringstream& args) {
 }
 
 
-// T6：策略对比
-void CommandProcessor::cmdT6(std::istringstream& args) {
-    if (packages_.empty()) {
-        printError("no_packages");
-        return;
-    }
-
-    compareStrategies(cache_, packages_, car_);
-}
-
 
 // STATUS：系统状态
 void CommandProcessor::cmdStatus(std::istringstream& args) {
@@ -292,7 +280,6 @@ void CommandProcessor::cmdHelp(std::istringstream& args) {
     std::cout << "T3                       Run T3 scheduling (cost with capacity)\n";
     std::cout << "T4 <nodes...>            Return recycling (TSP)\n";
     std::cout << "T5                       Two-vehicle协同配送\n";
-    std::cout << "T6                       Strategy comparison\n";
     std::cout << "STATUS                   Show system status\n";
     std::cout << "HELP                     Show this help\n";
     std::cout << "QUIT / EXIT              Exit program\n";

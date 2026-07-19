@@ -81,7 +81,6 @@ private:
     void cmdT3(std::istringstream& args);
     void cmdT4(std::istringstream& args);
     void cmdT5(std::istringstream& args);
-    void cmdT6(std::istringstream& args);
     void cmdStatus(std::istringstream& args);
     void cmdHelp(std::istringstream& args);
 };

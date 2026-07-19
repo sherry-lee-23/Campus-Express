@@ -631,8 +631,44 @@ static std::pair<std::vector<int>, std::vector<int>> distributePackages(
     //   4. 返回 {car1Indices, car2Indices}
     //
     // 提示：每辆车最终会分别调用 solveT3
+    int k = static_cast<int>(packages.size());
+    std::vector<int> order(k);
+    for (int i = 0; i < k; ++i) order[i] = i;
 
-    return {{}, {}};
+    // 按目的地到驿站的距离排序（近→远），距离相近时重者优先
+    std::sort(order.begin(), order.end(), [&](int a, int b) {
+        double da = getDist(cache, 0, packages[a].dest);
+        double db = getDist(cache, 0, packages[b].dest);
+        if (std::abs(da - db) > Delivery::EPS) return da < db;
+        return packages[a].weight > packages[b].weight;
+    });
+
+    std::vector<int> car1, car2;
+    double load1 = 0.0, load2 = 0.0;
+
+    for (int idx : order) {
+        double w = packages[idx].weight;
+        // 选择负载较轻的车装（且不超过容量）
+        if (load1 <= load2 && load1 + w <= capacity + Delivery::EPS) {
+            car1.push_back(idx);
+            load1 += w;
+        } else if (load2 + w <= capacity + Delivery::EPS) {
+            car2.push_back(idx);
+            load2 += w;
+        } else {
+            // 两车都装不下（理论上不会发生，因为每个包裹 ≤ 容量）
+            // 放入负载较轻的车（可能超载，但已无法避免，实际项目应避免）
+            if (load1 <= load2) {
+                car1.push_back(idx);
+                load1 += w;
+            } else {
+                car2.push_back(idx);
+                load2 += w;
+            }
+        }
+    }
+
+    return {car1, car2};
 }
 
 Delivery::T5Result solveT5(const AllPairsResult& cache,
@@ -652,66 +688,31 @@ Delivery::T5Result solveT5(const AllPairsResult& cache,
     // 注意：两辆车参数相同，可以共用 solveT3
 
     Delivery::T5Result result;
+    int k = static_cast<int>(packages.size());
+    if (k == 0) return result;
+
+    // 1. 分配包裹给两辆车
+    auto [car1Indices, car2Indices] = distributePackages(cache, packages, car.capacity);
+
+    // 2. 分别构造两辆车的包裹列表
+    std::vector<Delivery::Package> pkgs1, pkgs2;
+    pkgs1.reserve(car1Indices.size());
+    pkgs2.reserve(car2Indices.size());
+    for (int idx : car1Indices) pkgs1.push_back(packages[idx]);
+    for (int idx : car2Indices) pkgs2.push_back(packages[idx]);
+
+    // 3. 分别调用 solveT3
+    auto result1 = solveT3(cache, pkgs1, car);
+    auto result2 = solveT3(cache, pkgs2, car);
+
+    // 4. 合并结果
+    result.car1Trips = result1.trips;
+    result.car2Trips = result2.trips;
+    result.totalCost = result1.totalCost + result2.totalCost;
+    result.timeoutCount = result1.timeoutCount + result2.timeoutCount;
+
     return result;
 }
 
-// 8. T6: 策略对比
-static Delivery::T2Result solveT2WithStrategy(
-    const AllPairsResult& cache,
-    const std::vector<Delivery::Package>& packages,
-    const Delivery::Car& car,
-    const std::string& strategy) {
-    // TODO: 实现不同策略的 T2 调度
-    // 可用策略：
-    //   - "FIFO": 按到站时间先到先装（基线）
-    //   - "EDF": 按截止时间最早优先
-    //   - "ScoreBased": 综合评分（距离+重量+等待时间）
-    //
-    // 与 solveT2 的区别在于排序规则不同
-    // 其余逻辑（装载、模拟、计算不满意度）完全相同
-
-    Delivery::T2Result result;
-    return result;
-}
-
-static Delivery::T3Result solveT3WithStrategy(
-    const AllPairsResult& cache,
-    const std::vector<Delivery::Package>& packages,
-    const Delivery::Car& car,
-    const std::string& strategy) {
-    // TODO: 实现不同策略的 T3 调度
-    // 可用策略：
-    //   - "NearestFirst": 按距驿站近到远（基线）
-    //   - "CapacityAware": 大件优先
-    //   - "TimeAware": 截止时间紧急优先
-    //
-    // 与 solveT3 的区别在于分组排序规则不同
-    // 其余逻辑（模拟、计算成本、统计超时）完全相同
-
-    Delivery::T3Result result;
-    return result;
-}
-
-void compareStrategies(const AllPairsResult& cache,
-                       const std::vector<Delivery::Package>& packages,
-                       const Delivery::Car& car) {
-    // TODO: 实现 T6 策略对比（打印表格）
-    // 步骤：
-    //   1. T2 策略对比：
-    //      a. 分别用 "FIFO", "EDF", "ScoreBased" 调用 solveT2WithStrategy
-    //      b. 打印表格：策略名 | 趟次数 | 总不满意度
-    //   2. T3 策略对比：
-    //      a. 分别用 "NearestFirst", "CapacityAware", "TimeAware" 调用 solveT3WithStrategy
-    //      b. 打印表格：策略名 | 趟次数 | 总成本 | 超时数
-    //   3. 输出格式参考：
-    //      --- T2 策略对比 ---
-    //      FIFO           3趟    42.8
-    //      EDF            3趟    38.2
-    //      ScoreBased     2趟    35.6
-    //
-    // 提示：使用 std::setw() 格式化输出
-
-    // TODO: 在这里完成实现
-}
 
 } // namespace algorithm
