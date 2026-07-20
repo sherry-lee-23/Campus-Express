@@ -14,30 +14,17 @@ namespace algorithm {
 
 // 1. 全源最短路预计算
 AllPairsResult computeAllPairs(const Graph::LGraph& graph) {
-    // TODO: 实现全源最短路预计算
-    // 步骤：
-    //   1. 获取顶点数 n = graph.VertexCount()
-    //   2. 初始化 result.dist 为 n x n 的 INF 矩阵
-    //   3. 初始化 result.prev 为 n x n 的 -1 矩阵
-    //   4. 对每个顶点 s (0 到 n-1)：
-    //      a. 调用 dijkstra(s, dist, prev) 计算单源最短路
-    //      b. 将结果存入 result.dist[s] 和 result.prev[s]
-    //   5. 返回 result
-    //
-    // 提示：需要手写 MinHeap 实现优先队列
-    // 参考原 Delivery.cpp 中的 dijkstra 和 precomputeAllPairs 实现
-
-    int n = graph.VertexCount();
+    int n = graph.VertexCount();   //顶点数
     AllPairsResult result;
-    result.dist.assign(n,std::vector<double>(n,Delivery::INF));
-    result.prev.assign(n,std::vector<int>(n,-1));
+    result.dist.assign(n,std::vector<double>(n,Delivery::INF));  //初始化结构体所有的距离为INF
+    result.prev.assign(n,std::vector<int>(n,-1));  //初始化结构体所有的前驱为-1
 
-    for(int s = 0;s<n;s++){
+    for(int s = 0;s<n;s++){        //遍历，每个顶点作为起点，使用Dijkstra算法计算最短路
         std::vector<double> dist(n,Delivery::INF);
         std::vector<int> prev(n,-1);
         dist[s] = 0.0;
 
-        Delivery::MinHeap<double,int> heap;
+        Delivery::MinHeap<double,int> heap;        //使用手写最小堆
         heap.push(0.0,s);
 
         while(!heap.empty()){
@@ -46,7 +33,7 @@ AllPairsResult computeAllPairs(const Graph::LGraph& graph) {
 
             if(d > dist[u] + Delivery::EPS) continue;
 
-            for(const auto&[v,edge] : graph.GetNeighbors(u)){
+            for(const auto&[v,edge] : graph.GetNeighbors(u)){ //GetNeighbors返回的是一个map<int,EdgeNode>，遍历每个邻居
                 double w = edge.weight;
                 if(dist[u] + w < dist[v] - Delivery::EPS){
                     dist[v] = dist[u] + w;
@@ -62,21 +49,12 @@ AllPairsResult computeAllPairs(const Graph::LGraph& graph) {
 }
 
 double getDist(const AllPairsResult& cache, int from, int to) {
-    // TODO: 返回 from 到 to 的最短距离
     // 直接从 cache.dist[from][to] 读取即可
     return cache.dist[from][to];
 }
 
+//路径回溯函数，返回从from到to的路径，如果不可达返回空vector
 std::vector<int> getPath(const AllPairsResult& cache, int from, int to) {
-    // TODO: 返回从 from 到 to 的最短路径（节点序列）
-    // 步骤：
-    //   1. 从 to 开始，沿 cache.prev[from] 回溯到 from
-    //   2. 将回溯的节点存入 vector
-    //   3. 反转 vector（因为回溯是从终点到起点）
-    //   4. 如果 from 到 to 不可达（prev 链中断），返回空 vector
-    //
-    // 注意：路径应包含起点和终点
-    // 例如：from=0, to=5, 路径为 [0, 2, 5]
     std::vector<int> path;
     if (from == to){
         path.push_back(from);
@@ -85,8 +63,8 @@ std::vector<int> getPath(const AllPairsResult& cache, int from, int to) {
 
     int cur = to;
     while(cur != -1 && cur != from){
-        path.push_back(cur);
-        cur = cache.prev[from][cur];
+        path.push_back(cur);    //记录当前结点
+        cur = cache.prev[from][cur];  //找前驱结点
     }
 
     if(cur == -1) return {}; //不可达
@@ -100,38 +78,28 @@ std::vector<int> getPath(const AllPairsResult& cache, int from, int to) {
 std::vector<int> planRoute(const AllPairsResult& cache,
                            const std::vector<int>& destinations,
                            int startNode) {
-    // TODO: 实现最近邻贪心路线规划
-    // 步骤：
-    //   1. 用 visited 数组标记已访问的目的地
-    //   2. 从 startNode 开始
-    //   3. 每次选择距离当前节点最近的未访问目的地
-    //   4. 将该目的地加入 route，并更新当前节点
-    //   5. 重复直到所有目的地都被访问
-    //   6. 返回 route（不含起点，不含回到起点的最后一段）
-    //
-    // 提示：使用 getDist(cache, current, dest) 查询距离
     int D = static_cast<int>(destinations.size());
     if(D == 0) return {};
     
-    std::vector<bool> visited(D,false);
-    std::vector<int> route;
+    std::vector<bool> visited(D,false);    
+    std::vector<int> route; //记录路线顺序
     route.reserve(D);
 
-    int current = startNode;
-    for(int step = 0; step < D; ++step){
-        int bestIndex = -1;
+    int current = startNode;    //起点开始
+    for(int step = 0; step < D; ++step){  
+        int bestIndex = -1; 
         double bestDist = Delivery::INF;
 
         for(int i = 0;i< D;i++){
-            if(visited[i]) continue;
+            if(visited[i]) continue;    //已经访问就跳过
             double d = getDist(cache,current,destinations[i]);
-            if(d < bestDist){
+            if(d < bestDist){     //找最近邻
                 bestDist = d;
                 bestIndex = i;
             }
         }
 
-        if (bestIndex == -1) break; // no more reachable destinations
+        if (bestIndex == -1) break; //没有可访问的目的地了
 
         visited[bestIndex] = true;
         route.push_back(destinations[bestIndex]);
@@ -141,17 +109,10 @@ std::vector<int> planRoute(const AllPairsResult& cache,
 }
 
 
-// 3. T1: 最短路查询
+//T1: 最短路查询    已经预加载了直接查询就行
 Delivery::ShortestPathResult solveT1(const AllPairsResult& cache,
                                      int from,
                                      int to) {
-    // TODO: 实现 T1 最短路查询
-    // 步骤：
-    //   1. 调用 getDist(cache, from, to) 获取距离
-    //   2. 调用 getPath(cache, from, to) 获取路径
-    //   3. 如果距离 >= INF，设置 reachable = false
-    //   4. 否则 reachable = true
-    //   5. 返回 ShortestPathResult
     Delivery::ShortestPathResult result;
     result.distance = getDist(cache, from, to);
     result.path = getPath(cache, from, to);
@@ -159,116 +120,92 @@ Delivery::ShortestPathResult solveT1(const AllPairsResult& cache,
     return result;
 }
 
-// 4. T2: 最小化不满意度之和
+//T2: 最小化不满意度之和
 Delivery::T2Result solveT2(const AllPairsResult& cache,
                            const std::vector<Delivery::Package>& packages,
                            const Delivery::Car& car) {
-    // TODO: 实现 T2 调度算法
-    // 核心逻辑：
-    //   1. 按到站时间 S_i 排序所有包裹
-    //   2. 用 CircularQueue 维护待配送包裹队列
-    //   3. 循环直到队列为空：
-    //      a. 取出所有队列中的包裹
-    //      b. 分离出已到站（arrive <= currentTime）和未到站的
-    //      c. 如果没有已到站的包裹，将时间推进到下一个到站时刻
-    //      d. 按到站时间排序可用包裹，贪心装载（容量约束）
-    //      e. 按目的地分组，调用 planRoute() 规划路线
-    //      f. 模拟行驶，计算每个包裹的送达时间
-    //      g. 累加不满意度：送达时间 - 到站时间
-    //      h. 更新当前时间 = 返回驿站时刻
-    //      i. 未装载的包裹放回队列（留到下一趟）
-    //   4. 返回 T2Result（包含所有趟次和不满意度之和）
-    //
-    // 关键数据结构：CircularQueue<int> queue
-    // 提示：参考原 Delivery.cpp 中的 solveT2 实现
-
     Delivery::T2Result result;
     int k = static_cast<int>(packages.size());
     if (k == 0) return result;
 
-    std::vector<int>order(k);
-    for(int i = 0;i < k;i++) order[i] = i;
-    std::sort(order.begin(),order.end(),[&](int a, int b){
+    // 按到站时间排序
+    std::vector<int> order(k);
+    for (int i = 0; i < k; ++i) order[i] = i;
+    std::sort(order.begin(), order.end(), [&](int a, int b) {
         return packages[a].arrive < packages[b].arrive;
     });
 
-    Delivery::CircularQueue<int> queue(k);
-    for(int idx: order) queue.push(idx);
+    Delivery::CircularQueue<int> queue(k);  //按照到站时间顺序入队
+    for (int idx : order) queue.push(idx);
 
     double currentTime = 0.0;
 
-    while(!queue.empty()){
-        std::vector<int> all;
-        while(!queue.empty()){
-            all.push_back(queue.front());
+    while (!queue.empty()) {
+        // 只出队已到站的包裹 队列有序，队首是最早到站的，只需检查队首
+        std::vector<int> available;
+        while (!queue.empty() && packages[queue.front()].arrive <= currentTime + Delivery::EPS) {
+            available.push_back(queue.front());
             queue.pop();
         }
 
-        std::vector<int> available, notAvailable;
-        for(int idx: all){
-            if(packages[idx].arrive <= currentTime + Delivery::EPS){
-                available.push_back(idx);
-            }else{
-                notAvailable.push_back(idx);
-            }
-        }
-
-        if(available.empty()){
-            double nextArrive = Delivery::INF;
-            for(int idx: notAvailable){
-                nextArrive = std::min(nextArrive, packages[idx].arrive);
-            }
+        // 如果当前没有已到站的包裹
+        if (available.empty()) {
+            // 推进到下一个包裹的到站时刻
+            double nextArrive = packages[queue.front()].arrive;
             currentTime = nextArrive;
-            for(int idx: notAvailable) queue.push(idx);
-            continue;
+            continue;  // 下一轮循环会处理已到站的包裹
         }
 
-        std::sort(available.begin(), available.end(), [&](int a, int b){
-            return packages[a].arrive < packages[b].arrive;
-        });
-
+        // 贪心装载
         std::vector<int> loaded;
         double currentWeight = 0.0;
-        for(int idx: available){
-            if(currentWeight + packages[idx].weight <= car.capacity + Delivery::EPS){
+        for (int idx : available) {
+            if (currentWeight + packages[idx].weight <= car.capacity + Delivery::EPS) {
                 loaded.push_back(idx);
                 currentWeight += packages[idx].weight;
-            }else{
-                notAvailable.push_back(idx);
+            } else {
+                // 装不下 → 放回队列，留到下一趟
+                // 注意：这些包裹已经到站，但容量不够，只能等下一趟
+                queue.push(idx);
             }
         }
 
+        // 按目的地分组
         std::map<int, std::vector<int>> destPackages;
-        for(int idx: loaded){
+        for (int idx : loaded) {
             destPackages[packages[idx].dest].push_back(idx);
         }
 
         std::vector<int> destinations;
-        for(const auto& pair: destPackages){
+        for (const auto& pair : destPackages) {
             destinations.push_back(pair.first);
         }
 
+        // 规划路线
         std::vector<int> route = planRoute(cache, destinations, 0);
 
+        // 模拟行驶，计算不满意度
         double departureTime = currentTime;
         double cumulTime = 0.0;
         int prevNode = 0;
 
-        for(int dest: route){
+        for (int dest : route) {
             double legDist = getDist(cache, prevNode, dest);
             cumulTime += legDist / car.speed;
             double deliveryTime = departureTime + cumulTime;
 
-            for(int idx: destPackages[dest]){
+            for (int idx : destPackages[dest]) {
                 result.totalDissatisfaction += deliveryTime - packages[idx].arrive;
             }
             prevNode = dest;
         }
 
+        // 返回驿站
         double returnDist = getDist(cache, prevNode, 0);
         cumulTime += returnDist / car.speed;
         currentTime = departureTime + cumulTime;
 
+        // 记录本趟信息
         Delivery::Trip trip;
         trip.packageIndices = loaded;
         trip.route = route;
@@ -276,120 +213,159 @@ Delivery::T2Result solveT2(const AllPairsResult& cache,
         trip.returnTime = currentTime;
         trip.totalWeight = currentWeight;
         result.trips.push_back(trip);
-
-        std::sort(notAvailable.begin(), notAvailable.end(), [&](int a, int b){
-            return packages[a].arrive < packages[b].arrive;
-        });
-
-        for(int idx: notAvailable) queue.push(idx);
     }
+
     return result;
 }
 
-// 5. T3: 带容量的运送成本 + 超时统计
+// 5. T3: 带容量的运送成本 + 超时统计（改进版：聚类分组 + 容量补全）
 Delivery::T3Result solveT3(const AllPairsResult& cache,
                            const std::vector<Delivery::Package>& packages,
                            const Delivery::Car& car) {
-    // TODO: 实现 T3 调度算法
-    // 核心逻辑：
-    //   1. 所有包裹 S_i = 0，全部可用
-    //   2. 按目的地距驿站从近到远排序
-    //   3. 按容量分组：
-    //      a. 依次取包裹，累积重量
-    //      b. 超重则开始新的一组
-    //   4. 对每组（每趟）：
-    //      a. 按目的地分组
-    //      b. 调用 planRoute() 规划路线
-    //      c. 模拟行驶，逐段计算成本：
-    //         成本 = 段长 × (自重 + 当前车载包裹总重)
-    //      d. 每到一个目的地，卸货后更新车载重量
-    //      e. 计算各包裹送达时间，统计超时（送达 > 截止时间）
-    //      f. 返回驿站
-    //   5. 累加所有段成本 = 总成本
-    //   6. 返回 T3Result（趟次、各段成本、总成本、超时数）
-    //
-    // 提示：参考原 Delivery.cpp 中的 solveT3 实现
-
     Delivery::T3Result result;
     int k = static_cast<int>(packages.size());
     if (k == 0) return result;
 
-    std::vector<int> order(k);
-    for(int i = 0;i < k;i++) order[i] = i;
-    std::sort(order.begin(),order.end(),[&](int a, int b){
-        double distA = getDist(cache, 0, packages[a].dest);
-        double distB = getDist(cache, 0, packages[b].dest);
-        if (std::abs(distA - distB) > Delivery::EPS) return distA < distB;
-        return packages[a].dest < packages[b].dest;
-    });
-
-    std::vector<std::vector<int>> batches;
-    int idx = 0;
-    while(idx < k){
-        std::vector<int> batch;
-        double currentWeight = 0.0;
-        while(idx < k && currentWeight + packages[order[idx]].weight <= car.capacity + Delivery::EPS){
-            batch.push_back(order[idx]);
-            currentWeight += packages[order[idx]].weight;
-            idx++;
-        }
-        if(!batch.empty()) batches.push_back(batch);
-        else idx++; // skip overweight package
+    // 第一步：预处理 —— 计算每个包裹到驿站的距离
+    std::vector<double> distToStation(k);
+    for (int i = 0; i < k; ++i) {
+        distToStation[i] = getDist(cache, 0, packages[i].dest);
     }
 
+    // 第二步：聚类分组 —— 最大化装载 + 空间聚集
+    std::vector<bool> used(k, false);
+    std::vector<std::vector<int>> batches;
+
+    while (true) {
+        //选离驿站最近的未分组包裹
+        int seed = -1;
+        double minDist = Delivery::INF;
+        for (int i = 0; i < k; ++i) {
+            if (!used[i] && distToStation[i] < minDist) {
+                minDist = distToStation[i];
+                seed = i;
+            }
+        }
+        if (seed == -1) break;  // 所有包裹已分组
+
+        //收集候选包裹（未分组的）
+        std::vector<int> candidates;
+        for (int i = 0; i < k; ++i) {
+            if (!used[i]) candidates.push_back(i);
+        }
+
+        //按到种子的距离排序（近→远）
+        std::sort(candidates.begin(), candidates.end(), [&](int a, int b) {
+            double da = getDist(cache, packages[seed].dest, packages[a].dest);
+            double db = getDist(cache, packages[seed].dest, packages[b].dest);
+            if (std::abs(da - db) > Delivery::EPS) return da < db;
+            return packages[a].weight > packages[b].weight;  // 距离相近时重者优先
+        });
+
+        //先加入种子
+        std::vector<int> batch;
+        double currentWeight = 0.0;
+        batch.push_back(seed);
+        currentWeight += packages[seed].weight;
+        used[seed] = true;
+
+        //贪心选取：按空间距离由近到远，能装就装
+        for (int idx : candidates) {
+            if (used[idx]) continue;
+            if (currentWeight + packages[idx].weight <= car.capacity + Delivery::EPS) {
+                batch.push_back(idx);
+                currentWeight += packages[idx].weight;
+                used[idx] = true;
+            }
+        }
+
+        // 容量补全（可选优化）：如果剩余容量还比较多（比如 > 10%）
+        // 尝试从更远的包裹中找一个替换或补充
+        double remaining = car.capacity - currentWeight;
+        if (remaining > car.capacity * 0.2) {
+            // 尝试找一个重量最接近剩余容量的包裹
+            int bestIdx = -1;
+            double bestFit = Delivery::INF;
+            for (int i = 0; i < k; ++i) {
+                if (used[i]) continue;
+                double diff = remaining - packages[i].weight;
+                if (diff >= 0 && diff < bestFit) {
+                    bestFit = diff;
+                    bestIdx = i;
+                }
+            }
+            // 如果找到了能补上的包裹，加入
+            if (bestIdx != -1) {
+                batch.push_back(bestIdx);
+                currentWeight += packages[bestIdx].weight;
+                used[bestIdx] = true;
+                // 继续补（可以多轮，这里只做一轮）
+            }
+        }
+
+        batches.push_back(batch);
+    }
+
+    // 第三步：对每批进行配送（与原 T3 相同）
     double currentTime = 0.0;
-    for(const auto& batch : batches){
+    for (const auto& batch : batches) {
+        // 按目的地分组
         std::map<int, std::vector<int>> destPackages;
         double totalWeight = 0.0;
-        for(int pkgIdx : batch){
+        for (int pkgIdx : batch) {
             destPackages[packages[pkgIdx].dest].push_back(pkgIdx);
             totalWeight += packages[pkgIdx].weight;
         }
 
         std::vector<int> destinations;
-        for(const auto& pair : destPackages){
+        for (const auto& pair : destPackages) {
             destinations.push_back(pair.first);
         }
 
+        // 规划路线
         std::vector<int> route = planRoute(cache, destinations, 0);
 
+        // 模拟行驶，计算成本和超时
         std::vector<Delivery::SegmentCost> segmentCosts;
         double departureTime = currentTime;
         double cumulTime = 0.0;
         int prevNode = 0;
         double cargoLoad = totalWeight;
 
-        for(int dest : route){
+        for (int dest : route) {
             double legDist = getDist(cache, prevNode, dest);
-            double srgCost = legDist * (car.carWeight + cargoLoad);
-            result.totalCost += srgCost;
+            double segCost = legDist * (car.carWeight + cargoLoad);
+            result.totalCost += segCost;
 
             Delivery::SegmentCost seg;
             seg.from = prevNode;
             seg.to = dest;
             seg.distance = legDist;
             seg.cargoWeight = cargoLoad;
-            seg.segmentCost = srgCost;
+            seg.segmentCost = segCost;
             segmentCosts.push_back(seg);
 
             cumulTime += legDist / car.speed;
             double deliveryTime = departureTime + cumulTime;
 
-            for(int pkgIdx : destPackages[dest]){
-                if(deliveryTime > packages[pkgIdx].deadline + Delivery::EPS){
-                    result.timeoutCount++;
+            // 超时统计
+            for (int pkgIdx : destPackages[dest]) {
+                if (deliveryTime > packages[pkgIdx].deadline + Delivery::EPS) {
+                    ++result.timeoutCount;
                 }
             }
 
-            for(int pkgIdx : destPackages[dest]){
+            // 卸货
+            for (int pkgIdx : destPackages[dest]) {
                 cargoLoad -= packages[pkgIdx].weight;
             }
 
             prevNode = dest;
         }
 
+        // 返回驿站
         double returnDist = getDist(cache, prevNode, 0);
-        double returnCost = returnDist * (car.carWeight + cargoLoad);
+        double returnCost = returnDist * car.carWeight;  // 空车返回
         result.totalCost += returnCost;
 
         Delivery::SegmentCost returnSeg;
@@ -404,6 +380,7 @@ Delivery::T3Result solveT3(const AllPairsResult& cache,
         double returnTime = departureTime + cumulTime;
         currentTime = returnTime;
 
+        // 记录本趟信息
         Delivery::Trip trip;
         trip.packageIndices = batch;
         trip.route = route;
@@ -413,6 +390,7 @@ Delivery::T3Result solveT3(const AllPairsResult& cache,
         result.trips.push_back(trip);
         result.allSegments.push_back(segmentCosts);
     }
+
     return result;
 }
 
