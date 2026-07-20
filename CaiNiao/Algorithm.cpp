@@ -400,18 +400,6 @@ static Delivery::T4Result solveT4Exact(const AllPairsResult& cache,
                                        const Delivery::Car& car) {
     // TODO: 实现 T4 精确解（状态压缩 DP）
     // 条件：returnNodes.size() <= 20
-    // 核心逻辑：
-    //   1. n = returnNodes.size()
-    //   2. dp[mask][i] = 从起点出发，访问过 mask 中节点，最后停在 i 的最短距离
-    //   3. 初始化 dp[1<<i][i] = dist(0, returnNodes[i])
-    //   4. 枚举 mask，枚举 i（mask 中已访问的最后一个节点），枚举 j（下一个节点）
-    //   5. 转移：dp[mask|1<<j][j] = min(dp[mask|1<<j][j], dp[mask][i] + dist(i, j))
-    //   6. 最终答案：min_i(dp[fullMask][i] + dist(i, 0))
-    //   7. 回溯父指针，得到完整路线
-    //   8. totalTime = 最短距离 / 速度（速度=1，因为只比较相对顺序）
-    //   9. 返回 T4Result{route, totalTime}
-    //
-    // 提示：返回值路线应包含起点 0 和终点 0
     Delivery::T4Result result;
     int n = static_cast<int>(returnNodes.size());
     if (n == 0) {
@@ -508,17 +496,6 @@ static Delivery::T4Result solveT4Heuristic(const AllPairsResult& cache,
                                            const std::vector<int>& returnNodes,
                                            const Delivery::Car& car) {
     // TODO: 实现 T4 启发式解（最近邻 + 2-opt）
-    // 核心逻辑：
-    //   1. 用 planRoute() 生成初始路线
-    //   2. 2-opt 优化：
-    //      a. 遍历所有 (i, j) 对
-    //      b. 如果反转 i~j 之间的路径能缩短总长度，则反转
-    //      c. 重复直到无法改进
-    //   3. 计算总耗时（距离/速度，速度=1）
-    //   4. 返回 T4Result{route, totalTime}
-    //
-    // 提示：2-opt 的经典实现参考 TSP 近似算法
-
     Delivery::T4Result result;
     if (returnNodes.empty()) {
         result.route = {0};
@@ -574,13 +551,6 @@ Delivery::T4Result solveT4(const AllPairsResult& cache,
                            const std::vector<int>& returnNodes,
                            const Delivery::Car& car,
                            bool useExact) {
-    // TODO: 实现 T4 入口函数
-    // 步骤：
-    //   1. 如果 useExact == true 且 returnNodes.size() <= 20，调用 solveT4Exact
-    //   2. 否则调用 solveT4Heuristic
-    //   3. 返回结果
-    //
-    // 提示：如果 returnNodes 为空，直接返回空路线
 
     if (returnNodes.empty()) {
         Delivery::T4Result res;
@@ -601,14 +571,7 @@ static std::pair<std::vector<int>, std::vector<int>> distributePackages(
     const AllPairsResult& cache,
     const std::vector<Delivery::Package>& packages,
     double capacity) {
-    // TODO: 实现包裹分配策略（贪心）
-    // 步骤：
-    //   1. 按目的地距驿站从近到远排序所有包裹
-    //   2. 交替分配到两辆车（或平衡负载）
-    //   3. 保证每辆车装载重量 <= capacity
-    //   4. 返回 {car1Indices, car2Indices}
-    //
-    // 提示：每辆车最终会分别调用 solveT3
+
     int k = static_cast<int>(packages.size());
     std::vector<int> order(k);
     for (int i = 0; i < k; ++i) order[i] = i;
@@ -652,18 +615,6 @@ static std::pair<std::vector<int>, std::vector<int>> distributePackages(
 Delivery::T5Result solveT5(const AllPairsResult& cache,
                            const std::vector<Delivery::Package>& packages,
                            const Delivery::Car& car) {
-    // TODO: 实现 T5 双车协同调度
-    // 核心逻辑：
-    //   1. 调用 distributePackages() 将包裹分成两组
-    //   2. 对每组的包裹列表，分别调用 solveT3()
-    //   3. 合并结果：
-    //      a. car1Trips = 车1的所有趟次
-    //      b. car2Trips = 车2的所有趟次
-    //      c. totalCost = 车1总成本 + 车2总成本
-    //      d. timeoutCount = 车1超时数 + 车2超时数
-    //   4. 返回 T5Result
-    //
-    // 注意：两辆车参数相同，可以共用 solveT3
 
     Delivery::T5Result result;
     int k = static_cast<int>(packages.size());
