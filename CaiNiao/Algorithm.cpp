@@ -11,6 +11,109 @@
 
 namespace algorithm {
 
+//数据分析结果结构体
+struct DataAnalysisResult {
+    // T2 权重
+    double w_arrive;      // 到站时间权重
+    double w_deadline;    // 截止时间权重
+
+    // T3 权重
+    double w_dist;        // 距离权重
+    double w_deadline_t3; // 截止时间权重（T3用）
+    double w_weight;      // 重量权重
+};
+
+//数据分析函数
+static DataAnalysisResult analyzeData(
+    const AllPairsResult& cache,
+    const std::vector<Delivery::Package>& packages,
+    const Delivery::Car& car) {
+
+    DataAnalysisResult result;
+    int k = packages.size();
+
+    // 默认权重（基线）
+    result.w_arrive = 0.5;
+    result.w_deadline = 0.5;
+    result.w_dist = 0.4;
+    result.w_deadline_t3 = 0.3;
+    result.w_weight = 0.3;
+
+    // 1. 分析到站时间分布（用于 T2）
+    double avgArrive = 0, maxArrive = 0;
+    for (int i = 0; i < k; ++i) {
+        avgArrive += packages[i].arrive;
+        maxArrive = std::max(maxArrive, packages[i].arrive);
+    }
+    avgArrive /= k;
+
+    //如果平均到站时间较大（包裹分散到达），增加到站权重
+    if (avgArrive > 10.0) {
+        result.w_arrive += 0.15;
+        result.w_deadline -= 0.15;
+    }
+
+    // 2. 分析截止时间分布（用于 T2）
+    double avgDeadline = 0, minDeadline = Delivery::INF, maxDeadline = 0;
+    for (int i = 0; i < k; ++i) {
+        avgDeadline += packages[i].deadline;
+        minDeadline = std::min(minDeadline, packages[i].deadline);
+        maxDeadline = std::max(maxDeadline, packages[i].deadline);
+    }
+    avgDeadline /= k;
+
+    //如果截止时间普遍紧迫（平均截止时间较小），增加截止权重
+    if (avgDeadline < 100.0) {
+        result.w_deadline += 0.15;
+        result.w_arrive -= 0.15;
+    }
+
+    // 3. 分析目的地距离分布（用于 T3）
+    double avgDist = 0, maxDist = 0;
+    for (int i = 0; i < k; ++i) {
+        double d = getDist(cache, 0, packages[i].dest);
+        avgDist += d;
+        maxDist = std::max(maxDist, d);
+    }
+    avgDist /= k;
+
+    //如果距离普遍较远，增加距离权重（减少绕路更重要）
+    if (avgDist > 50.0) {
+        result.w_dist += 0.1;
+        result.w_weight -= 0.05;
+        result.w_deadline_t3 -= 0.05;
+    }
+
+    // 4. 分析重量分布（用于 T3）
+    double avgWeight = 0, maxWeight = 0;
+    for (int i = 0; i < k; ++i) {
+        avgWeight += packages[i].weight;
+        maxWeight = std::max(maxWeight, packages[i].weight);
+    }
+    avgWeight /= k;
+
+    //如果包裹普遍较重（重货需要近处卸），增加重量权重
+    if (avgWeight > car.capacity * 0.15) {
+        result.w_weight += 0.15;
+        result.w_dist -= 0.075;
+        result.w_deadline_t3 -= 0.075;
+    }
+
+    // 5. 归一化（确保权重和为 1）
+    // T2 归一化
+    double totalT2 = result.w_arrive + result.w_deadline;
+    result.w_arrive /= totalT2;
+    result.w_deadline /= totalT2;
+
+    // T3 归一化
+    double totalT3 = result.w_dist + result.w_deadline_t3 + result.w_weight;
+    result.w_dist /= totalT3;
+    result.w_deadline_t3 /= totalT3;
+    result.w_weight /= totalT3;
+
+    return result;
+}
+
 
 // 1. 全源最短路预计算
 AllPairsResult computeAllPairs(const Graph::LGraph& graph) {
@@ -131,10 +234,21 @@ Delivery::T2Result solveT2(const AllPairsResult& cache,
     int k = static_cast<int>(packages.size());
     if (k == 0) return result;
 
+    DataAnalysisResult analysis = analyzeData(cache, packages, car);
+    double maxArrive = 0, maxDeadline = 0;
+    for (int i = 0; i < k; ++i) {
+        maxArrive = std::max(maxArrive, packages[i].arrive);
+        maxDeadline = std::max(maxDeadline, packages[i].deadline);
+    }
+
     std::vector<int> order(k);
     for (int i = 0; i < k; ++i) order[i] = i;
     std::sort(order.begin(), order.end(), [&](int a, int b) {
-        return packages[a].arrive < packages[b].arrive;
+        double scoreA = analysis.w_arrive * (packages[a].arrive / maxArrive)
+                      + analysis.w_deadline * (packages[a].deadline / maxDeadline);
+        double scoreB = analysis.w_arrive * (packages[b].arrive / maxArrive)
+                      + analysis.w_deadline * (packages[b].deadline / maxDeadline);
+        return scoreA < scoreB;
     });
 
     Delivery::CircularQueue<int> queue(k);
@@ -230,13 +344,36 @@ Delivery::T3Result solveT3(const AllPairsResult& cache,
     int k = static_cast<int>(packages.size());
     if (k == 0) return result;
 
+    DataAnalysisResult analysis = analyzeData(cache, packages, car);
+    
+    double maxDist = 0, maxDeadline = 0, maxWeight = 0;
+    for (int i = 0; i < k; ++i) {
+        maxDist = std::max(maxDist, getDist(cache, 0, packages[i].dest));
+        maxDeadline = std::max(maxDeadline, packages[i].deadline);
+        maxWeight = std::max(maxWeight, packages[i].weight);
+    }
+
     std::vector<int> order(k);
-    for(int i = 0;i < k;i++) order[i] = i;
-    std::sort(order.begin(),order.end(),[&](int a, int b){
-        double distA = getDist(cache, 0, packages[a].dest);
-        double distB = getDist(cache, 0, packages[b].dest);
-        if (std::abs(distA - distB) > Delivery::EPS) return distA < distB;
-        return packages[a].dest < packages[b].dest;
+    for (int i = 0; i < k; ++i) order[i] = i;
+
+    std::sort(order.begin(), order.end(), [&](int a, int b) {
+        double normDistA = (maxDist > Delivery::EPS) ? getDist(cache, 0, packages[a].dest) / maxDist : 0.0;
+        double normDistB = (maxDist > Delivery::EPS) ? getDist(cache, 0, packages[b].dest) / maxDist : 0.0;
+        double normDlA   = (maxDeadline > Delivery::EPS) ? packages[a].deadline / maxDeadline : 0.0;
+        double normDlB   = (maxDeadline > Delivery::EPS) ? packages[b].deadline / maxDeadline : 0.0;
+        double normWtA   = (maxWeight > Delivery::EPS) ? packages[a].weight / maxWeight : 0.0;
+        double normWtB   = (maxWeight > Delivery::EPS) ? packages[b].weight / maxWeight : 0.0;
+
+        double scoreA = analysis.w_dist * normDistA
+                      + analysis.w_deadline_t3 * normDlA
+                      - analysis.w_weight * normWtA;
+        double scoreB = analysis.w_dist * normDistB
+                      + analysis.w_deadline_t3 * normDlB
+                      - analysis.w_weight * normWtB;
+
+        if (std::abs(scoreA - scoreB) > Delivery::EPS) return scoreA < scoreB;
+        // 同分时按距离排序
+        return getDist(cache, 0, packages[a].dest) < getDist(cache, 0, packages[b].dest);
     });
 
     std::vector<std::vector<int>> batches;
