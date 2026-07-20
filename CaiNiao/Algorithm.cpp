@@ -332,11 +332,11 @@ Delivery::T3Result solveT3(const AllPairsResult& cache,
     return result;
 }
 
-// 6. T4: 退货回收（TSP）
+// 6. T4: 退货回收（TSP）—— 精确解（状态压缩 DP）
+// 参考 AcWing 91. 最短Hamilton路径 状态压缩DP解法
 static Delivery::T4Result solveT4Exact(const AllPairsResult& cache,
-                                       const std::vector<int>& returnNodes, 
+                                       const std::vector<int>& returnNodes,
                                        const Delivery::Car& car) {
-    //实现 T4 精确解（状态压缩 DP）
     Delivery::T4Result result;
     int n = static_cast<int>(returnNodes.size());
     if (n == 0) {
@@ -349,36 +349,43 @@ static Delivery::T4Result solveT4Exact(const AllPairsResult& cache,
     int fullMask = (1 << n) - 1;
 
     std::vector<std::vector<double>> dp(1 << n, std::vector<double>(n, INF));
-    std::vector<std::vector<int>> parent(1 << n, std::vector<int>(n, -1));
 
-    // 初始化：从驿站到第一个退货点
+    //初始化，从驿站 0 出发，只访问了 returnNodes[i] 这一个退货点
     for (int i = 0; i < n; ++i) {
         dp[1 << i][i] = getDist(cache, 0, returnNodes[i]);
-        parent[1 << i][i] = -2;  // 起点标记
     }
 
     // 状态转移
+    // 遍历所有 mask，枚举当前所在城市 j，再枚举上一步城市 k
+    // 转移：dp[mask][j] = min(dp[mask][j], dp[mask - (1<<j)][k] + dist(k, j))
+    // 其中 mask 必须包含 j，且 mask - (1<<j) 必须包含 k
     for (int mask = 1; mask < (1 << n); ++mask) {
-        for (int i = 0; i < n; ++i) {
-            if (!(mask & (1 << i))) continue;
-            if (dp[mask][i] >= INF) continue;
-            for (int j = 0; j < n; ++j) {
-                if (mask & (1 << j)) continue;
-                int newMask = mask | (1 << j);
-                double newDist = dp[mask][i] + getDist(cache, returnNodes[i], returnNodes[j]);
-                if (newDist < dp[newMask][j] - Delivery::EPS) {
-                    dp[newMask][j] = newDist;
-                    parent[newMask][j] = i;
+        for (int j = 0; j < n; ++j) {
+            // 检查 mask 是否包含 j（当前城市 j 必须在已访问集合中）
+            if (!(mask & (1 << j))) continue;
+
+            // 从上一步城市 k 转移到 j
+            // prevMask = mask 去掉 j 后的状态
+            int prevMask = mask - (1 << j);
+            for (int k = 0; k < n; ++k) {
+                // 检查 prevMask 是否包含 k（上一步城市 k 必须在之前的已访问集合中）
+                if (!(prevMask & (1 << k))) continue;
+
+                double newDist = dp[prevMask][k] + getDist(cache, returnNodes[k], returnNodes[j]);
+                if (newDist < dp[mask][j] - Delivery::EPS) {
+                    dp[mask][j] = newDist;
                 }
             }
         }
     }
 
-    // 找最优终点并加入返回驿站的距离
+    // 求最终答案：所有城市已访问，最后停在某个城市，然后返回驿站 0
+    // 与 AcWing 91 的区别：AcWing 91 强制终点为 n-1
+    // 本题可停在任意城市，再返回驿站
     double bestDist = INF;
     int bestLast = -1;
+
     for (int i = 0; i < n; ++i) {
-        if (dp[fullMask][i] >= INF) continue;
         double total = dp[fullMask][i] + getDist(cache, returnNodes[i], 0);
         if (total < bestDist) {
             bestDist = total;
@@ -386,45 +393,69 @@ static Delivery::T4Result solveT4Exact(const AllPairsResult& cache,
         }
     }
 
+    // 5. 处理无解情况
+
     if (bestLast == -1 || bestDist >= INF) {
         result.route = {0};
         result.totalTime = 0.0;
         return result;
     }
 
-    //回溯路径（使用 vector 收集，最后反转）
-    std::vector<int> revRoute;
+    // 路径回溯
+    // 从终点 bestLast 反向找路径节点
+    std::vector<int> reversePath;  // 逆序路径（从终点回溯到起点）
     int mask = fullMask;
     int cur = bestLast;
-    
+
+    // 从终点往前回溯，每次找到上一步的 k
     while (true) {
-        revRoute.push_back(returnNodes[cur]);
-        int prev = parent[mask][cur];
-        if (prev == -2) break;      // 到达起点
-        if (prev == -1) {           // 意外情况，安全退出
-            revRoute.clear();
+        reversePath.push_back(returnNodes[cur]);
+
+        // 如果当前是初始状态（只访问了一个节点）
+        // 则 mask 只有一位是 1，即 mask == (1 << cur)
+        if (mask == (1 << cur)) break;
+
+        // 找上一步城市 k：遍历所有可能的 k
+        int prevMask = mask - (1 << cur);
+        int prevNode = -1;
+
+        for (int k = 0; k < n; ++k) {
+            if (!(prevMask & (1 << k))) continue;
+            double dist = dp[prevMask][k] + getDist(cache, returnNodes[k], returnNodes[cur]);
+            // 如果当前 dp[mask][cur] 是由 k 转移而来
+            if (std::abs(dp[mask][cur] - dist) < Delivery::EPS) {
+                prevNode = k;
+                break;
+            }
+        }
+
+        if (prevNode == -1) {
+            // 理论上不会发生，如果发生则安全退出
+            reversePath.clear();
             break;
         }
-        mask &= ~(1 << cur);
-        cur = prev;
+
+        mask = prevMask;
+        cur = prevNode;
     }
 
-    // 如果回溯失败，返回空
-    if (revRoute.empty()) {
+    if (reversePath.empty()) {
         result.route = {0};
         result.totalTime = 0.0;
         return result;
     }
 
-    std::reverse(revRoute.begin(), revRoute.end());
+    // 反转得到正确顺序（起点 → 终点）
+    std::reverse(reversePath.begin(), reversePath.end());
 
-    //构建完整路线（一次完成，避免重复插入 0）
+    // 构造完整路线（首尾包含驿站 0）
     result.route.clear();
-    result.route.reserve(revRoute.size() + 2);
+    result.route.reserve(reversePath.size() + 2);
     result.route.push_back(0);
-    result.route.insert(result.route.end(), revRoute.begin(), revRoute.end());
+    result.route.insert(result.route.end(), reversePath.begin(), reversePath.end());
     result.route.push_back(0);
 
+    // 计算总耗时
     result.totalTime = bestDist / car.speed;
     return result;
 }
